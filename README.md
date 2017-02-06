@@ -49,7 +49,7 @@ github = https://github.com/murdinc/isosceles
 
 ```
 
-The structure of the source_folder for the configuration above should look similar this:
+The structure of the source_folder for the configuration above should look similar to this:
 
 ```
 source/
