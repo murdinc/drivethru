@@ -226,7 +226,7 @@ curl -o $TARBALL -L -f $URL
 if [ $? -eq 0 ]
 then
     echo "Copying {{ .Name }} binary into $DEST"
-    mkdir -p $DEST/
+    sudo mkdir -p $DEST/
     tar -xzf $TARBALL && sudo mv -f {{ .Name }} $DEST/
     if [ $? -eq 0 ]
     then
