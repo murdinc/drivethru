@@ -121,7 +121,6 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 
 	for _, profile := range menu.Profiles {
 		if profile.Name == profileName {
-
 			path := menu.Source + "/" + profile.Folder + "/" + osName + "/" + archName + "/" + profile.Name
 
 			terminal.Information(fmt.Sprintf("Download request file path: %s\n", path))
@@ -164,6 +163,8 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 				terminal.ErrorLine(err.Error())
 				return
 			}
+
+			return
 		}
 	}
 }
@@ -199,7 +200,6 @@ func loadMenu() (*Menu, error) {
 		menu.Profiles = append(menu.Profiles, *profile)
 
 		terminal.Information(fmt.Sprintf("-	found profile named %s.", profile.Name))
-
 	}
 
 	if len(menu.Host) > 0 && !govalidator.IsHost(menu.Host) {

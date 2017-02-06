@@ -49,6 +49,69 @@ github = https://github.com/murdinc/isosceles
 
 ```
 
+The structure of the source_folder for the configuration above should look similar this:
+
+```
+source/
+├── awsm
+│   ├── Darwin
+│   │   └── amd64
+│   │       └── awsm
+│   ├── Linux
+│   │   ├── amd64
+│   │   │   └── awsm
+│   │   ├── arm
+│   │   │   └── awsm
+│   │   └── arm64
+│   │       └── awsm
+│   └── Windows
+│       └── amd64
+│           └── awsm
+├── crusher
+│   ├── Darwin
+│   │   └── amd64
+│   │       └── crusher
+│   ├── Linux
+│   │   ├── amd64
+│   │   │   └── crusher
+│   │   ├── arm
+│   │   │   └── crusher
+│   │   └── arm64
+│   │       └── crusher
+│   └── Windows
+│       └── amd64
+│           └── crusher
+├── drivethru
+│   ├── Darwin
+│   │   └── amd64
+│   │       └── drivethru
+│   ├── Linux
+│   │   ├── amd64
+│   │   │   └── drivethru
+│   │   ├── arm
+│   │   │   └── drivethru
+│   │   └── arm64
+│   │       └── drivethru
+│   └── Windows
+│       └── amd64
+│           └── drivethru
+└── isosceles
+    ├── Darwin
+    │   └── amd64
+    │       └── isosceles
+    ├── Linux
+    │   ├── amd64
+    │   │   └── isosceles
+    │   ├── arm
+    │   │   └── isosceles
+    │   └── arm64
+    │       └── isosceles
+    └── Windows
+        └── amd64
+            └── isosceles
+
+```
+
 
 ## Example Installation Script URL Output
 This is an example installation script, generated for the installation of drivethru via the URL `http://dl.sudoba.sh/get/drivethru`
