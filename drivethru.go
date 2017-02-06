@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"errors"
 	"fmt"
 	"html/template"
@@ -125,7 +126,13 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 
 			terminal.Information(fmt.Sprintf("Download request file path: %s\n", path))
 
-			tarball := tar.NewWriter(w)
+			// gzip writer
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			gz.Name = profile.Name
+
+			// tarball
+			tarball := tar.NewWriter(gz)
 			defer tarball.Close()
 
 			info, err := os.Stat(path)
