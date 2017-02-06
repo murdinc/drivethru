@@ -1,6 +1,9 @@
 # drivethru
 > Latest Release File Server
 
+[![Build Status](https://travis-ci.org/murdinc/drivethru.svg)](https://travis-ci.org/murdinc/drivethru)
+
+
 ## Intro
 **drivethru** does the heavy-lifting of presenting end-users with a one-line-command for installing your application. For example: `curl -s http://dl.sudoba.sh/get/drivethru | sh`
 
