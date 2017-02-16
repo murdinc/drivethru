@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	ini "gopkg.in/ini.v1"
 
@@ -26,15 +28,17 @@ type Menu struct {
 	URL      string
 	Host     string
 	Port     string
-	Source   string
+	Root     string
 	Profiles []Profile
 }
 
 type Profile struct {
-	Name   string `ini:"-"` // actually the section name
-	Folder string `ini:"folder"`
-	Github string `ini:"github"`
-	URL    string `ini:"-"`
+	Name        string `ini:"-"` // actually the section name
+	Source      string `ini:"source"`
+	Destination string `ini:"destination"`
+	Github      string `ini:"github"`
+	Universal   bool   `ini:"universal"`
+	URL         string `ini:"-"`
 }
 
 func main() {
@@ -66,8 +70,11 @@ func main() {
 	})
 
 	r.Route("/download", func(r chi.Router) {
-		r.Route("/:name/:os/:arch", func(r chi.Router) {
-			r.Get("/", getDownload)
+		r.Route("/:name", func(r chi.Router) {
+			r.Get("/", getUniversalDownload)
+			r.Route("/:os/:arch", func(r chi.Router) {
+				r.Get("/", getDownload)
+			})
 		})
 	})
 
@@ -94,9 +101,24 @@ func main() {
 func getScript(w http.ResponseWriter, r *http.Request) {
 	profileName := chi.URLParam(r, "name")
 
+Loop:
 	for _, profile := range menu.Profiles {
 		if profile.Name == profileName {
 			profile.URL = menu.URL
+
+			_, err := os.Stat(menu.Root + profile.Source)
+			if err != nil {
+				terminal.ErrorLine(err.Error() + " : " + profile.Source)
+				break Loop
+			}
+
+			// If universal, pass them the universal script
+			if profile.Universal {
+				t, _ := template.New("script").Parse(universalScriptTemplate)
+				t.Execute(w, profile)
+				return
+			}
+
 			t, _ := template.New("script").Parse(scriptTemplate)
 			t.Execute(w, profile)
 			return
@@ -121,9 +143,8 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 
 	for _, profile := range menu.Profiles {
 		if profile.Name == profileName {
-			path := menu.Source + "/" + profile.Folder + "/" + osName + "/" + archName + "/" + profile.Name
-
-			terminal.Information(fmt.Sprintf("Download request file path: %s\n", path))
+			source := menu.Root + profile.Source + "/" + osName + "/" + archName + "/"
+			terminal.Information(fmt.Sprintf("Download request file source: %s\n", source))
 
 			// gzip writer
 			gz := gzip.NewWriter(w)
@@ -134,34 +155,120 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 			tarball := tar.NewWriter(gz)
 			defer tarball.Close()
 
-			info, err := os.Stat(path)
+			info, err := os.Stat(source)
 			if err != nil {
 				terminal.ErrorLine(err.Error())
 				return
 			}
 
-			header, err := tar.FileInfoHeader(info, info.Name())
+			var baseDir string
+			if info.IsDir() {
+				baseDir = filepath.Base(profile.Name)
+			}
+
+			err = filepath.Walk(source,
+				func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					header, err := tar.FileInfoHeader(info, info.Name())
+					if err != nil {
+						return err
+					}
+
+					if baseDir != "" {
+						header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
+					}
+
+					if err := tarball.WriteHeader(header); err != nil {
+						return err
+					}
+
+					if info.IsDir() {
+						return nil
+					}
+
+					file, err := os.Open(path)
+					if err != nil {
+						return err
+					}
+					defer file.Close()
+					_, err = io.Copy(tarball, file)
+					return err
+				})
+
+			if err != nil {
+				terminal.ErrorLine(err.Error())
+			}
+
+			return
+		}
+	}
+}
+
+func getUniversalDownload(w http.ResponseWriter, r *http.Request) {
+	profileName := chi.URLParam(r, "name")
+
+	terminal.Information(fmt.Sprintf("Download request for: %s (universal)\n", profileName))
+
+	for _, profile := range menu.Profiles {
+		if profile.Name == profileName {
+			source := menu.Root + profile.Source + "/"
+			terminal.Information(fmt.Sprintf("Download request file source: %s\n", source))
+
+			// gzip writer
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			gz.Name = profile.Name
+
+			// tarball
+			tarball := tar.NewWriter(gz)
+			defer tarball.Close()
+
+			info, err := os.Stat(source)
 			if err != nil {
 				terminal.ErrorLine(err.Error())
 				return
 			}
 
-			if err := tarball.WriteHeader(header); err != nil {
-				terminal.ErrorLine(err.Error())
-				return
+			var baseDir string
+			if info.IsDir() {
+				baseDir = filepath.Base(profile.Name)
 			}
 
-			file, err := os.Open(path)
-			if err != nil {
-				terminal.ErrorLine(err.Error())
-				return
-			}
-			defer file.Close()
+			err = filepath.Walk(source,
+				func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					header, err := tar.FileInfoHeader(info, info.Name())
+					if err != nil {
+						return err
+					}
 
-			_, err = io.Copy(tarball, file)
+					if baseDir != "" {
+						header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
+					}
+
+					if err := tarball.WriteHeader(header); err != nil {
+						return err
+					}
+
+					if info.IsDir() {
+						return nil
+					}
+
+					file, err := os.Open(path)
+					if err != nil {
+						return err
+					}
+					defer file.Close()
+					_, err = io.Copy(tarball, file)
+					return err
+				})
+
 			if err != nil {
 				terminal.ErrorLine(err.Error())
-				return
 			}
 
 			return
@@ -185,7 +292,7 @@ func loadMenu() (*Menu, error) {
 			menu.URL = app.Key("url").String()
 			menu.Host = app.Key("host").String()
 			menu.Port = app.Key("port").String()
-			menu.Source = app.Key("source_folder").String()
+			menu.Root = app.Key("root").String()
 			continue
 		}
 
@@ -199,6 +306,24 @@ func loadMenu() (*Menu, error) {
 		profile.Name = app.Name()
 		menu.Profiles = append(menu.Profiles, *profile)
 
+		// Add path separators if needed
+
+		// Source
+		if profile.Source[0] != os.PathSeparator {
+			profile.Source = fmt.Sprintf("%s%s", string(os.PathSeparator), profile.Source)
+		}
+		if profile.Source[len(profile.Source)-1] != os.PathSeparator {
+			profile.Source = fmt.Sprintf("%s%s", profile.Source, string(os.PathSeparator))
+		}
+
+		// Destination
+		if profile.Destination[0] != os.PathSeparator {
+			profile.Destination = fmt.Sprintf("%s%s", string(os.PathSeparator), profile.Destination)
+		}
+		if profile.Destination[len(profile.Destination)-1] != os.PathSeparator {
+			profile.Destination = fmt.Sprintf("%s%s", profile.Destination, string(os.PathSeparator))
+		}
+
 		terminal.Information(fmt.Sprintf("-	found profile named %s.", profile.Name))
 	}
 
@@ -208,6 +333,11 @@ func loadMenu() (*Menu, error) {
 
 	if len(menu.Port) > 0 && !govalidator.IsPort(menu.Port) {
 		return menu, errors.New("port specified in conf is invalid: " + menu.Host)
+	}
+
+	// Add path separator if needed
+	if menu.Root[len(menu.Root)-1] != os.PathSeparator {
+		menu.Root = fmt.Sprintf("%s%s", menu.Root, string(os.PathSeparator))
 	}
 
 	terminal.Delta(fmt.Sprintf("loaded %d profiles.", len(menu.Profiles)))
@@ -225,24 +355,56 @@ TARBALL="{{ .Name }}-$$.$FORMAT"
 OS=$(uname)
 ARCH=$(uname -m)
 URL="http://{{ .URL }}/download/{{ .Name }}/$OS/$ARCH/"
-DEST=/usr/local/bin
+DEST={{ .Destination }}
 
 echo "Downloading $URL"
 
 curl -o $TARBALL -L -f $URL
 if [ $? -eq 0 ]
 then
-    echo "Copying {{ .Name }} binary into $DEST"
+    echo "\nCopying {{ .Name }} into $DEST\n"
     sudo mkdir -p $DEST/
-    tar -xzf $TARBALL && sudo mv -f {{ .Name }} $DEST/
+    sudo mkdir -p /tmp/$$/ && sudo chmod 777 /tmp/$$/
+    tar -xzf $TARBALL -C /tmp/$$/ && sudo cp -av /tmp/$$/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }} && sudo rm -rf /tmp/$$
     if [ $? -eq 0 ]
     then
         rm $TARBALL
-        echo "{{ .Name }} has been installed into $DEST/{{ .Name }}"
+        echo "\n{{ .Name }} has been installed into $DEST\n"
+        echo "Done!"
         exit 0
     fi
 else
-    echo "Failed to determine your platform.\nTry downloading from {{ .Github }}"
+	echo "Failed to install {{ .Name }}.\nPlease try downloading from {{ .Github }} instead."
+fi
+
+exit 1
+`
+
+var universalScriptTemplate = `#!/bin/sh
+
+FORMAT="tar.gz"
+TARBALL="{{ .Name }}-$$.$FORMAT"
+URL="http://{{ .URL }}/download/{{ .Name }}/"
+DEST={{ .Destination }}
+
+echo "Downloading $URL"
+
+curl -o $TARBALL -L -f $URL
+if [ $? -eq 0 ]
+then
+    echo "\nCopying {{ .Name }} into $DEST\n"
+    sudo mkdir -p $DEST/
+    sudo mkdir -p /tmp/$$/ && sudo chmod 777 /tmp/$$/
+    tar -xzf $TARBALL -C /tmp/$$/ && sudo cp -av /tmp/$$/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }} && sudo rm -rf /tmp/$$
+    if [ $? -eq 0 ]
+    then
+        rm $TARBALL
+        echo "\n{{ .Name }} has been installed into $DEST\n"
+        echo "Done!"
+        exit 0
+    fi
+else
+    echo "Failed to install {{ .Name }}.\nPlease try downloading from {{ .Github }} instead."
 fi
 
 exit 1
@@ -250,6 +412,6 @@ exit 1
 
 var errorScriptTemplate = `#!/bin/sh
 
-echo "There was an error building your script for the download of {{ . }}, please open an issue on github."
+echo "There was an error building your script for the download of {{ . }}, please contact the developer."
 exit 1
 `

@@ -29,23 +29,33 @@ url = dl.sudoba.sh
 
 host = localhost
 port = 2020
-source_folder = /etc/drivethru/source
+root = /etc/drivethru/source
 
 [drivethru]
-folder = drivethru
+source = drivethru
+destination = /usr/local/bin/
 github = https://github.com/murdinc/drivethru
 
-[awsm]
-folder = awsm
-github = https://github.com/murdinc/awsm
-
 [crusher]
-folder = crusher
+source = crusher
+destination = /usr/local/bin/
 github = https://github.com/murdinc/crusher
 
 [isosceles]
-folder = isosceles
+source = isosceles
+destination = /usr/local/bin/
 github = https://github.com/murdinc/isosceles
+
+[awsm]
+source = awsm
+destination = /usr/local/bin/
+github = https://github.com/murdinc/awsm
+
+[awsmDashboard]
+source = test
+destination = ~/awsmDashboard
+github = https://github.com/murdinc/awsmDashboard
+universal = true
 
 ```
 
@@ -67,6 +77,12 @@ source/
 │   └── Windows
 │       └── amd64
 │           └── awsm
+├── awsmDashboard
+│   ├── index.html
+│   ├── style.css
+│   ├── awsmDashboard.js
+│   └── awsmDashboard.js.map
+│  
 ├── crusher
 │   ├── Darwin
 │   │   └── amd64
