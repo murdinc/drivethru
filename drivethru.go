@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/md5"
 	"errors"
 	"fmt"
 	"html/template"
@@ -69,9 +70,18 @@ func main() {
 		})
 	})
 
+	r.Route("/hash", func(r chi.Router) {
+		r.Route("/:name", func(r chi.Router) {
+			r.Get("/", getHash)
+			r.Route("/:os/:arch", func(r chi.Router) {
+				r.Get("/", getHash)
+			})
+		})
+	})
+
 	r.Route("/download", func(r chi.Router) {
 		r.Route("/:name", func(r chi.Router) {
-			r.Get("/", getUniversalDownload)
+			r.Get("/", getDownload)
 			r.Route("/:os/:arch", func(r chi.Router) {
 				r.Get("/", getDownload)
 			})
@@ -143,60 +153,21 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 
 	for _, profile := range menu.Profiles {
 		if profile.Name == profileName {
-			source := menu.Root + profile.Source + "/" + osName + "/" + archName + "/"
+			source := menu.Root + profile.Source + "/"
+
+			if !profile.Universal {
+				if osName != "" && archName != "" {
+					source = source + osName + "/" + archName + "/"
+				} else {
+					terminal.ErrorLine("Invalid request.")
+					http.Error(w, "Invalid request.", 500)
+					return
+				}
+			}
+
 			terminal.Information(fmt.Sprintf("Download request file source: %s\n", source))
 
-			// gzip writer
-			gz := gzip.NewWriter(w)
-			defer gz.Close()
-			gz.Name = profile.Name
-
-			// tarball
-			tarball := tar.NewWriter(gz)
-			defer tarball.Close()
-
-			info, err := os.Stat(source)
-			if err != nil {
-				terminal.ErrorLine(err.Error())
-				return
-			}
-
-			var baseDir string
-			if info.IsDir() {
-				baseDir = filepath.Base(profile.Name)
-			}
-
-			err = filepath.Walk(source,
-				func(path string, info os.FileInfo, err error) error {
-					if err != nil {
-						return err
-					}
-					header, err := tar.FileInfoHeader(info, info.Name())
-					if err != nil {
-						return err
-					}
-
-					if baseDir != "" {
-						header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
-					}
-
-					if err := tarball.WriteHeader(header); err != nil {
-						return err
-					}
-
-					if info.IsDir() {
-						return nil
-					}
-
-					file, err := os.Open(path)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-					_, err = io.Copy(tarball, file)
-					return err
-				})
-
+			err := zipIt(profile.Name, source, w)
 			if err != nil {
 				terminal.ErrorLine(err.Error())
 			}
@@ -206,74 +177,104 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getUniversalDownload(w http.ResponseWriter, r *http.Request) {
+func getHash(w http.ResponseWriter, r *http.Request) {
 	profileName := chi.URLParam(r, "name")
+	osName := chi.URLParam(r, "os")
+	archName := chi.URLParam(r, "arch")
 
-	terminal.Information(fmt.Sprintf("Download request for: %s (universal)\n", profileName))
+	switch archName {
+	case "x86_64":
+		archName = "amd64"
+	}
+
+	terminal.Information(fmt.Sprintf("Download request for: %s, OS: %s, Arch: %s\n", profileName, osName, archName))
 
 	for _, profile := range menu.Profiles {
 		if profile.Name == profileName {
+
 			source := menu.Root + profile.Source + "/"
+
+			if !profile.Universal {
+				if osName != "" && archName != "" {
+					source = source + osName + "/" + archName + "/"
+				} else {
+					terminal.ErrorLine("Invalid request.")
+					http.Error(w, "Invalid request.", 500)
+					return
+				}
+			}
+
 			terminal.Information(fmt.Sprintf("Download request file source: %s\n", source))
 
-			// gzip writer
-			gz := gzip.NewWriter(w)
-			defer gz.Close()
-			gz.Name = profile.Name
+			md5Hash := md5.New()
 
-			// tarball
-			tarball := tar.NewWriter(gz)
-			defer tarball.Close()
-
-			info, err := os.Stat(source)
+			err := zipIt(profile.Name, source, md5Hash)
 			if err != nil {
 				terminal.ErrorLine(err.Error())
+				http.Error(w, err.Error(), 500)
 				return
 			}
 
-			var baseDir string
-			if info.IsDir() {
-				baseDir = filepath.Base(profile.Name)
-			}
+			hashString := fmt.Sprintf("%x", md5Hash.Sum(nil))
 
-			err = filepath.Walk(source,
-				func(path string, info os.FileInfo, err error) error {
-					if err != nil {
-						return err
-					}
-					header, err := tar.FileInfoHeader(info, info.Name())
-					if err != nil {
-						return err
-					}
+			io.WriteString(w, hashString)
 
-					if baseDir != "" {
-						header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
-					}
-
-					if err := tarball.WriteHeader(header); err != nil {
-						return err
-					}
-
-					if info.IsDir() {
-						return nil
-					}
-
-					file, err := os.Open(path)
-					if err != nil {
-						return err
-					}
-					defer file.Close()
-					_, err = io.Copy(tarball, file)
-					return err
-				})
-
-			if err != nil {
-				terminal.ErrorLine(err.Error())
-			}
-
+			terminal.Information("Returned Hash: " + hashString + " for file source: " + source + ".\n")
 			return
 		}
 	}
+}
+
+func zipIt(name, source string, w io.Writer) (err error) {
+	// gzip writer
+	gz := gzip.NewWriter(w)
+	defer gz.Close()
+	gz.Name = name
+
+	// tarball
+	tarball := tar.NewWriter(gz)
+	defer tarball.Close()
+
+	info, err := os.Stat(source)
+	if err != nil {
+		return
+	}
+
+	var baseDir string
+	if info.IsDir() {
+		baseDir = filepath.Base(name)
+	}
+
+	return filepath.Walk(source,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			header, err := tar.FileInfoHeader(info, info.Name())
+			if err != nil {
+				return err
+			}
+
+			if baseDir != "" {
+				header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
+			}
+
+			if err := tarball.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if info.IsDir() {
+				return nil
+			}
+
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(tarball, file)
+			return err
+		})
 }
 
 func loadMenu() (*Menu, error) {
@@ -351,11 +352,18 @@ func loadMenu() (*Menu, error) {
 var scriptTemplate = `#!/bin/sh
 
 FORMAT="tar.gz"
-TARBALL="{{ .Name }}-$$.$FORMAT"
+TEMPFOLDER="/tmp/drivethru-{{ .Name }}-$$"
+TARBALL="$TEMPFOLDER/tar/{{ .Name }}.$FORMAT"
 OS=$(uname)
 ARCH=$(uname -m)
 URL="http://{{ .URL }}/download/{{ .Name }}/$OS/$ARCH/"
 DEST={{ .Destination }}
+
+sudo mkdir -p /tmp/$$/ && sudo chmod 777 /tmp/$$/
+
+sudo mkdir -p "$TEMPFOLDER/tar"
+sudo mkdir -p "$TEMPFOLDER/expanded"
+sudo chmod -R 777 "$TEMPFOLDER"
 
 echo "Downloading $URL"
 
@@ -364,17 +372,17 @@ if [ $? -eq 0 ]
 then
     echo "\nCopying {{ .Name }} into $DEST\n"
     sudo mkdir -p $DEST/
-    sudo mkdir -p /tmp/$$/ && sudo chmod 777 /tmp/$$/
-    tar -xzf $TARBALL -C /tmp/$$/ && sudo cp -av /tmp/$$/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }} && sudo rm -rf /tmp/$$
+    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }}
     if [ $? -eq 0 ]
     then
-        rm $TARBALL
+        sudo rm -rf "$TEMPFOLDER"
         echo "\n{{ .Name }} has been installed into $DEST\n"
         echo "Done!"
         exit 0
     fi
 else
-	echo "Failed to install {{ .Name }}.\nPlease try downloading from {{ .Github }} instead."
+    echo "Failed to install {{ .Name }}.\nPlease try downloading from {{ .Github }} instead."
+    sudo rm -rf "$TEMPFOLDER"
 fi
 
 exit 1
@@ -383,9 +391,14 @@ exit 1
 var universalScriptTemplate = `#!/bin/sh
 
 FORMAT="tar.gz"
-TARBALL="{{ .Name }}-$$.$FORMAT"
+TEMPFOLDER="/tmp/drivethru-{{ .Name }}-$$"
+TARBALL="$TEMPFOLDER/tar/{{ .Name }}.$FORMAT"
 URL="http://{{ .URL }}/download/{{ .Name }}/"
-DEST={{ .Destination }}
+DEST="{{ .Destination }}"
+
+sudo mkdir -p "$TEMPFOLDER/tar"
+sudo mkdir -p "$TEMPFOLDER/expanded"
+sudo chmod -R 777 "$TEMPFOLDER"
 
 echo "Downloading $URL"
 
@@ -394,17 +407,17 @@ if [ $? -eq 0 ]
 then
     echo "\nCopying {{ .Name }} into $DEST\n"
     sudo mkdir -p $DEST/
-    sudo mkdir -p /tmp/$$/ && sudo chmod 777 /tmp/$$/
-    tar -xzf $TARBALL -C /tmp/$$/ && sudo cp -av /tmp/$$/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }} && sudo rm -rf /tmp/$$
+    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }}
     if [ $? -eq 0 ]
     then
-        rm $TARBALL
+        sudo rm -rf "$TEMPFOLDER"
         echo "\n{{ .Name }} has been installed into $DEST\n"
         echo "Done!"
         exit 0
     fi
 else
     echo "Failed to install {{ .Name }}.\nPlease try downloading from {{ .Github }} instead."
+    sudo rm -rf "$TEMPFOLDER"
 fi
 
 exit 1
