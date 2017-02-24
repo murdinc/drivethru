@@ -135,28 +135,37 @@ This is an example installation script, generated for the installation of drivet
 #!/bin/sh
 
 FORMAT="tar.gz"
-TARBALL="drivethru-$$.$FORMAT"
+TEMPFOLDER="/tmp/drivethru-drivethru-$$"
+TARBALL="$TEMPFOLDER/tar/drivethru.$FORMAT"
 OS=$(uname)
 ARCH=$(uname -m)
 URL="http://dl.sudoba.sh/download/drivethru/$OS/$ARCH/"
-DEST=/usr/local/bin
+DEST=/usr/local/bin/
+
+sudo mkdir -p /tmp/$$/ && sudo chmod 777 /tmp/$$/
+
+sudo mkdir -p "$TEMPFOLDER/tar"
+sudo mkdir -p "$TEMPFOLDER/expanded"
+sudo chmod -R 777 "$TEMPFOLDER"
 
 echo "Downloading $URL"
 
 curl -o $TARBALL -L -f $URL
 if [ $? -eq 0 ]
 then
-    echo "Copying drivethru binary into $DEST"
+    echo "\nCopying drivethru into $DEST\n"
     sudo mkdir -p $DEST/
-    tar -xzf $TARBALL && sudo mv -f drivethru $DEST/
+    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/drivethru/* $DEST/ && rm -rf drivethru
     if [ $? -eq 0 ]
     then
-        rm $TARBALL
-        echo "drivethru has been installed into $DEST/drivethru"
+        sudo rm -rf "$TEMPFOLDER"
+        echo "\ndrivethru has been installed into $DEST\n"
+        echo "Done!"
         exit 0
     fi
 else
-    echo "Failed to determine your platform.\nTry downloading from https://github.com/murdinc/drivethru"
+    echo "Failed to install drivethru.\nPlease try downloading from https://github.com/murdinc/drivethru instead."
+    sudo rm -rf "$TEMPFOLDER"
 fi
 
 exit 1

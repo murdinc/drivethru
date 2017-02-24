@@ -34,12 +34,13 @@ type Menu struct {
 }
 
 type Profile struct {
-	Name        string `ini:"-"` // actually the section name
-	Source      string `ini:"source"`
-	Destination string `ini:"destination"`
-	Github      string `ini:"github"`
-	Universal   bool   `ini:"universal"`
-	URL         string `ini:"-"`
+	Name        string   `ini:"-"` // actually the section name
+	Source      string   `ini:"source"`
+	Destination string   `ini:"destination"`
+	Github      string   `ini:"github"`
+	Universal   bool     `ini:"universal"`
+	Extra       []string `ini:"extra"`
+	URL         string   `ini:"-"`
 }
 
 func main() {
@@ -377,7 +378,9 @@ then
     then
         sudo rm -rf "$TEMPFOLDER"
         echo "\n{{ .Name }} has been installed into $DEST\n"
-        echo "Done!"
+        {{ if .Extra }}{{ $url := .URL }}
+        {{ range .Extra }}curl -s http://{{ $url }}/get/{{ . }} | sh
+        {{end}}{{ else }}echo "Done!"{{end}}
         exit 0
     fi
 else
@@ -412,6 +415,8 @@ then
     then
         sudo rm -rf "$TEMPFOLDER"
         echo "\n{{ .Name }} has been installed into $DEST\n"
+        {{ if .Extra }}{{range .Extra}}http://{{ .URL }}/get/{{ . }}/ | sh
+        {{end}}{{end}}
         echo "Done!"
         exit 0
     fi
