@@ -66,24 +66,24 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	r.Route("/get", func(r chi.Router) {
-		r.Route("/:name", func(r chi.Router) {
+		r.Route("/{name}", func(r chi.Router) {
 			r.Get("/", getScript)
 		})
 	})
 
 	r.Route("/hash", func(r chi.Router) {
-		r.Route("/:name", func(r chi.Router) {
+		r.Route("/{name}", func(r chi.Router) {
 			r.Get("/", getHash)
-			r.Route("/:os/:arch", func(r chi.Router) {
+			r.Route("/{os}/{arch}", func(r chi.Router) {
 				r.Get("/", getHash)
 			})
 		})
 	})
 
 	r.Route("/download", func(r chi.Router) {
-		r.Route("/:name", func(r chi.Router) {
+		r.Route("/{name}", func(r chi.Router) {
 			r.Get("/", getDownload)
-			r.Route("/:os/:arch", func(r chi.Router) {
+			r.Route("/{os}/{arch}", func(r chi.Router) {
 				r.Get("/", getDownload)
 			})
 		})
