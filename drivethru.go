@@ -16,10 +16,10 @@ import (
 	ini "gopkg.in/ini.v1"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/goware/cors"
 	"github.com/murdinc/terminal"
-	"github.com/pressly/chi"
-	"github.com/pressly/chi/middleware"
 )
 
 // Global
