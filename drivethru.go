@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"crypto/md5"
 	"errors"
 	"fmt"
@@ -67,12 +68,14 @@ func main() {
 
 	r.Route("/get", func(r chi.Router) {
 		r.Route("/{name}", func(r chi.Router) {
+			r.Use(NameCtx)
 			r.Get("/", getScript)
 		})
 	})
 
 	r.Route("/hash", func(r chi.Router) {
 		r.Route("/{name}", func(r chi.Router) {
+			r.Use(NameCtx)
 			r.Get("/", getHash)
 			r.Route("/{os}/{arch}", func(r chi.Router) {
 				r.Get("/", getHash)
@@ -82,6 +85,7 @@ func main() {
 
 	r.Route("/download", func(r chi.Router) {
 		r.Route("/{name}", func(r chi.Router) {
+			r.Use(NameCtx)
 			r.Get("/", getDownload)
 			r.Route("/{os}/{arch}", func(r chi.Router) {
 				r.Get("/", getDownload)
@@ -109,8 +113,16 @@ func main() {
 
 }
 
+func NameCtx(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		classType := chi.URLParam(r, "name")
+		ctx := context.WithValue(r.Context(), "name", classType)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func getScript(w http.ResponseWriter, r *http.Request) {
-	profileName := chi.URLParam(r, "name")
+	profileName := r.Context().Value("name").(string)
 
 Loop:
 	for _, profile := range menu.Profiles {
@@ -141,7 +153,8 @@ Loop:
 }
 
 func getDownload(w http.ResponseWriter, r *http.Request) {
-	profileName := chi.URLParam(r, "name")
+	profileName := r.Context().Value("name").(string)
+
 	osName := chi.URLParam(r, "os")
 	archName := chi.URLParam(r, "arch")
 
@@ -179,7 +192,8 @@ func getDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func getHash(w http.ResponseWriter, r *http.Request) {
-	profileName := chi.URLParam(r, "name")
+	profileName := r.Context().Value("name").(string)
+
 	osName := chi.URLParam(r, "os")
 	archName := chi.URLParam(r, "arch")
 
