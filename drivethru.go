@@ -387,7 +387,7 @@ if [ $? -eq 0 ]
 then
     echo "\nCopying {{ .Name }} into $DEST\n"
     sudo mkdir -p $DEST/
-    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }}
+    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/{{ .Name }}/* $DEST/ && rm -rf $TARBALL
     if [ $? -eq 0 ]
     then
         sudo rm -rf "$TEMPFOLDER"
@@ -424,7 +424,7 @@ if [ $? -eq 0 ]
 then
     echo "\nCopying {{ .Name }} into $DEST\n"
     sudo mkdir -p $DEST/
-    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/{{ .Name }}/* $DEST/ && rm -rf {{ .Name }}
+    tar -xzf $TARBALL -C $TEMPFOLDER/expanded && sudo cp -av $TEMPFOLDER/expanded/{{ .Name }}/* $DEST/ && rm -rf $TARBALL
     if [ $? -eq 0 ]
     then
         sudo rm -rf "$TEMPFOLDER"
